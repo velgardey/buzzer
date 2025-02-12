@@ -1,0 +1,68 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --font-architects-daughter: 'Architects Daughter', cursive;
+  }
+
+  body {
+    @apply antialiased text-gray-900;
+  }
+}
+
+@layer components {
+  .font-architects-daughter {
+    font-family: var(--font-architects-daughter);
+  }
+}
+
+/* Hand-drawn effect styles */
+.border-2 {
+  position: relative;
+  border-style: solid;
+  border-radius: 8px;
+  transition: all 0.3s ease;
+}
+
+/* Hover animations */
+@keyframes float {
+  0% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-5px);
+  }
+  100% {
+    transform: translateY(0px);
+  }
+}
+
+.hover\:float:hover {
+  animation: float 2s ease-in-out infinite;
+}
+
+/* Sketchy underline effect */
+.hover\:underline {
+  position: relative;
+  text-decoration: none;
+}
+
+.hover\:underline::after {
+  content: '';
+  position: absolute;
+  width: 100%;
+  height: 2px;
+  bottom: -2px;
+  left: 0;
+  background-color: currentColor;
+  transform: scaleX(0);
+  transform-origin: right;
+  transition: transform 0.3s ease;
+}
+
+.hover\:underline:hover::after {
+  transform: scaleX(1);
+  transform-origin: left;
+}
