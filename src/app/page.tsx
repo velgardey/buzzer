@@ -79,6 +79,90 @@ const TrendingQuiz = ({ title, subtitle, players, avgTime }: {
   </div>
 );
 
+const CreateQuizSection = () => (
+  <div className="mb-24 relative">
+    {/* Decorative elements */}
+    <div className="absolute -left-4 top-1/2 transform -translate-y-1/2 w-8 h-8 
+                    border-2 border-gray-800 rounded-full animate-ping opacity-20" />
+    <div className="absolute -right-4 top-1/2 transform -translate-y-1/2 w-8 h-8 
+                    border-2 border-gray-800 rounded-full animate-ping opacity-20 delay-300" />
+    
+    <Link href="/editor" 
+      className="block relative group">
+      <div className="relative bg-white/90 backdrop-blur-sm border-2 border-gray-800 rounded-2xl 
+                      p-8 md:p-12 overflow-hidden transition-transform duration-500 
+                      transform group-hover:-translate-y-2">
+        {/* Squiggly decorative lines */}
+        <svg className="absolute top-0 left-0 w-full h-20 opacity-10" viewBox="0 0 400 40">
+          <path d="M0,20 Q50,5 100,20 T200,20 T300,20 T400,20" fill="none" stroke="#000" strokeWidth="2" />
+        </svg>
+        <svg className="absolute bottom-0 right-0 w-full h-20 opacity-10 rotate-180" viewBox="0 0 400 40">
+          <path d="M0,20 Q50,5 100,20 T200,20 T300,20 T400,20" fill="none" stroke="#000" strokeWidth="2" />
+        </svg>
+
+        <div className="flex flex-col md:flex-row items-center justify-between gap-8 relative z-10">
+          <div className="flex-1">
+            <h2 className="text-4xl md:text-5xl font-bold mb-4 relative">
+              Create Your Own Quiz!
+              <span className="absolute -top-6 -right-6 text-2xl animate-bounce">✨</span>
+            </h2>
+            <p className="text-xl text-gray-600 mb-6">
+              Unleash your creativity and challenge others with your own interactive quizzes.
+              Join our community of quiz creators!
+            </p>
+            <div className="flex flex-wrap gap-4 text-gray-600">
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-purple-100 flex items-center justify-center">
+                  🎨
+                </div>
+                <span>Beautiful Templates</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-pink-100 flex items-center justify-center">
+                  🔥
+                </div>
+                <span>Easy to Use</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-full bg-yellow-100 flex items-center justify-center">
+                  🚀
+                </div>
+                <span>Share Instantly</span>
+              </div>
+            </div>
+          </div>
+
+          <div className="relative">
+            <div className="w-64 h-64 relative transform group-hover:rotate-3 transition-transform duration-500">
+              {/* Editor preview illustration */}
+              <div className="absolute inset-0 border-2 border-gray-800 rounded-xl bg-gradient-to-br 
+                            from-purple-600 to-pink-600 opacity-20 group-hover:opacity-30 
+                            transition-opacity duration-500" />
+              <div className="absolute inset-4 border-2 border-gray-800 rounded-lg bg-white" />
+              <div className="absolute inset-x-8 top-8 h-4 bg-gray-100 rounded" />
+              <div className="absolute inset-x-8 top-16 h-4 bg-gray-100 rounded" />
+              <div className="absolute inset-x-8 top-24 h-4 bg-gray-100 rounded" />
+              <div className="absolute right-8 bottom-8 w-12 h-12 bg-gradient-to-br 
+                            from-purple-600 to-pink-600 rounded-lg shadow-lg 
+                            animate-pulse" />
+            </div>
+            {/* Arrow indicator */}
+            <div className="absolute -right-4 top-1/2 transform -translate-y-1/2 
+                          opacity-0 group-hover:opacity-100 group-hover:translate-x-2 
+                          transition-all duration-500">
+              <ArrowRight className="w-8 h-8 text-gray-800" />
+            </div>
+          </div>
+        </div>
+
+        {/* Corner decorations */}
+        <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-gray-800" />
+        <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-gray-800" />
+      </div>
+    </Link>
+  </div>
+);
+
 export default function Home() {
   const categories = [
     { name: "General", icon: "🎯" },
@@ -182,6 +266,9 @@ export default function Home() {
             Start Quizzing
           </button>
         </div>
+
+        {/* Add Create Quiz Section here */}
+        <CreateQuizSection />
 
         {/* Trending Quizzes */}
         <section className="mb-24">

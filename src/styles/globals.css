@@ -66,3 +66,111 @@
   transform: scaleX(1);
   transform-origin: left;
 }
+
+/* Custom Scrollbar Styles */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #a855f7;
+  border-radius: 4px;
+  opacity: 0.8;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: #9333ea;
+}
+
+/* Hide scrollbar for Chrome, Safari and Opera */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Hide scrollbar for IE, Edge and Firefox */
+.no-scrollbar {
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+
+/* Thin scrollbar variant */
+.thin-scrollbar::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+
+/* Dark scrollbar variant */
+.dark-scrollbar::-webkit-scrollbar-thumb {
+  background: #1f2937;
+}
+
+.dark-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #374151;
+}
+
+/* Fancy scrollbar with border */
+.fancy-scrollbar::-webkit-scrollbar-thumb {
+  background: #a855f7;
+  border: 2px solid white;
+  border-radius: 8px;
+}
+
+.fancy-scrollbar::-webkit-scrollbar-thumb:hover {
+  background: #9333ea;
+}
+
+/* React Resizable Styles */
+.react-resizable {
+  position: relative !important;
+  display: block !important;
+}
+
+.react-resizable-handle {
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  background-color: white;
+  border: 2px solid #a855f7;
+  border-radius: 50%;
+  transition: transform 0.2s ease;
+  z-index: 50;
+}
+
+.react-resizable-handle:hover {
+  transform: scale(1.1);
+}
+
+.react-resizable-handle-sw {
+  bottom: -6px;
+  left: -6px;
+  cursor: sw-resize;
+}
+
+.react-resizable-handle-se {
+  bottom: -6px;
+  right: -6px;
+  cursor: se-resize;
+}
+
+.react-resizable-handle-nw {
+  top: -6px;
+  left: -6px;
+  cursor: nw-resize;
+}
+
+.react-resizable-handle-ne {
+  top: -6px;
+  right: -6px;
+  cursor: ne-resize;
+}
+
+/* Hide resize handles in preview mode */
+.preview-mode .react-resizable-handle {
+  display: none;
+}
