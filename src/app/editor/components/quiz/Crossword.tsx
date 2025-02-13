@@ -1,7 +1,8 @@
+import { useState, useCallback, useMemo, useEffect } from 'react';
 import type { KeyboardEvent } from 'react';
-import { useState, useCallback } from 'react';
-import { motion } from 'framer-motion';
-import { Plus, Minus, X, Check } from 'lucide-react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { Eye, EyeOff, X, Check } from 'lucide-react';
+import { useQuizState } from './QuizStateManager';
 
 interface CrosswordCell {
   id: string;
@@ -25,9 +26,11 @@ interface CrosswordClue {
   answer: string;
   startCell: { row: number; col: number };
   isValidated?: boolean;
+  isCorrect?: boolean;
 }
 
 interface CrosswordProps {
+  id: string;
   cells: CrosswordCell[];
   clues: CrosswordClue[];
   onChange: (updates: {
@@ -38,6 +41,7 @@ interface CrosswordProps {
 }
 
 export default function Crossword({
+  id,
   cells,
   clues,
   onChange,
@@ -46,7 +50,9 @@ export default function Crossword({
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
   const [selectedClue, setSelectedClue] = useState<string | null>(null);
   const [direction, setDirection] = useState<'across' | 'down'>('across');
-  const [showAnswers] = useState(false);
+  const [showAnswers, setShowAnswers] = useState(false);
+  const [showHints, setShowHints] = useState(false);
+  const { updateScore, updateProgress, setFeedback, state } = useQuizState();
 
   // Calculate grid dimensions
   const gridDimensions = useCallback(() => {
@@ -70,6 +76,69 @@ export default function Crossword({
   const getCellByPosition = useCallback((row: number, col: number) => {
     return cells.find(cell => cell.row === row && cell.col === col);
   }, [cells]);
+
+  // Automatic cell numbering
+  const updateCellNumbers = useCallback((cellsToUpdate: CrosswordCell[]) => {
+    let number = 1;
+    const newCells = [...cellsToUpdate];
+
+    newCells.forEach(cell => {
+      if (cell.isBlocked) {
+        cell.number = undefined;
+        return;
+      }
+
+      const leftCell = getCellByPosition(cell.row, cell.col - 1);
+      const aboveCell = getCellByPosition(cell.row - 1, cell.col);
+      const rightCell = getCellByPosition(cell.row, cell.col + 1);
+      const belowCell = getCellByPosition(cell.row + 1, cell.col);
+
+      const needsNumber = (
+        // Start of across word
+        ((leftCell?.isBlocked ?? true) && rightCell?.isBlocked === false) ??
+        // Start of down word
+        ((aboveCell?.isBlocked ?? true) && belowCell?.isBlocked === false)
+      );
+
+      if (needsNumber) {
+        cell.number = number++;
+      } else {
+        cell.number = undefined;
+      }
+    });
+
+    onChange({ cells: newCells });
+  }, [onChange, getCellByPosition]);
+
+  const handleAddCell = useCallback((cellId: string, direction: 'up' | 'down' | 'left' | 'right') => {
+    const sourceCell = cells.find(cell => cell.id === cellId);
+    if (!sourceCell) return;
+
+    let newRow = sourceCell.row;
+    let newCol = sourceCell.col;
+
+    switch (direction) {
+      case 'up': newRow--; break;
+      case 'down': newRow++; break;
+      case 'left': newCol--; break;
+      case 'right': newCol++; break;
+    }
+
+    // Check if cell already exists at the new position
+    if (getCellByPosition(newRow, newCol)) return;
+
+    const newCell: CrosswordCell = {
+      id: `cell-${newRow}-${newCol}-${Date.now()}`,
+      letter: '',
+      isBlocked: false,
+      row: newRow,
+      col: newCol
+    };
+
+    const newCells = [...cells, newCell];
+    onChange({ cells: newCells });
+    updateCellNumbers(newCells);
+  }, [cells, onChange, getCellByPosition, updateCellNumbers]);
 
   // Handle keyboard navigation
   const handleKeyDown = useCallback((e: KeyboardEvent<HTMLInputElement>, cellId: string) => {
@@ -121,7 +190,7 @@ export default function Crossword({
         }
         break;
       default:
-        if (e.key.length === 1 && /[a-zA-Z]/.exec(e.key)) {
+        if (e.key.length === 1 && /[a-zA-Z]/.test(e.key)) {
           if (direction === 'across') nextCol = currentCell.col + 1;
           else nextRow = currentCell.row + 1;
         }
@@ -131,71 +200,7 @@ export default function Crossword({
     if (nextCell && !nextCell.isBlocked) {
       setSelectedCell(nextCell.id);
     }
-  }, [cells, direction, clues, getCellByPosition, setSelectedCell]);
-
-  // Add cell in a direction
-  const handleAddCell = (cellId: string, direction: 'up' | 'down' | 'left' | 'right') => {
-    const sourceCell = cells.find(cell => cell.id === cellId);
-    if (!sourceCell) return;
-
-    let newRow = sourceCell.row;
-    let newCol = sourceCell.col;
-
-    switch (direction) {
-      case 'up': newRow--; break;
-      case 'down': newRow++; break;
-      case 'left': newCol--; break;
-      case 'right': newCol++; break;
-    }
-
-    // Check if cell already exists at the new position
-    if (getCellByPosition(newRow, newCol)) return;
-
-    const newCell: CrosswordCell = {
-      id: `cell-${newRow}-${newCol}-${Date.now()}`,
-      letter: '',
-      isBlocked: false,
-      row: newRow,
-      col: newCol
-    };
-
-    const newCells = [...cells, newCell];
-    onChange({ cells: newCells });
-    updateCellNumbers(newCells);
-  };
-
-  // Automatic cell numbering
-  const updateCellNumbers = useCallback((cellsToUpdate: CrosswordCell[]) => {
-    let number = 1;
-    const newCells = [...cellsToUpdate];
-
-    newCells.forEach(cell => {
-      if (cell.isBlocked) {
-        cell.number = undefined;
-        return;
-      }
-
-      const leftCell = getCellByPosition(cell.row, cell.col - 1);
-      const aboveCell = getCellByPosition(cell.row - 1, cell.col);
-      const rightCell = getCellByPosition(cell.row, cell.col + 1);
-      const belowCell = getCellByPosition(cell.row + 1, cell.col);
-
-      const needsNumber = (
-        // Start of across word
-        ((leftCell?.isBlocked ?? true) && rightCell?.isBlocked === false) ??
-        // Start of down word
-        ((aboveCell?.isBlocked ?? true) && belowCell?.isBlocked === false)
-      );
-
-      if (needsNumber) {
-        cell.number = number++;
-      } else {
-        cell.number = undefined;
-      }
-    });
-
-    onChange({ cells: newCells });
-  }, [onChange, getCellByPosition]);
+  }, [cells, direction, clues, getCellByPosition]);
 
   // Handle cell update
   const handleCellUpdate = useCallback((cellId: string, updates: Partial<CrosswordCell>) => {
@@ -209,16 +214,15 @@ export default function Crossword({
   }, [cells, onChange, updateCellNumbers]);
 
   // Handle clue update
-  const handleClueUpdate = (clueId: string, updates: Partial<CrosswordClue>) => {
-    onChange({
-      clues: clues.map(clue =>
-        clue.id === clueId ? { ...clue, ...updates } : clue
-      )
-    });
-  };
+  const handleClueUpdate = useCallback((clueId: string, updates: Partial<CrosswordClue>) => {
+    const newClues = clues.map(clue =>
+      clue.id === clueId ? { ...clue, ...updates } : clue
+    );
+    onChange({ clues: newClues });
+  }, [clues, onChange]);
 
   // Add clue
-  const addClue = (direction: 'across' | 'down') => {
+  const addClue = useCallback((direction: 'across' | 'down') => {
     const newClue: CrosswordClue = {
       id: `clue-${Date.now()}`,
       number: clues.length + 1,
@@ -228,46 +232,64 @@ export default function Crossword({
       startCell: { row: 0, col: 0 }
     };
     onChange({ clues: [...clues, newClue] });
-  };
+  }, [clues, onChange]);
 
   // Remove clue
-  const removeClue = (clueId: string) => {
+  const removeClue = useCallback((clueId: string) => {
     onChange({ clues: clues.filter(clue => clue.id !== clueId) });
-  };
+  }, [clues, onChange]);
 
-  // Validate answers
-  const validateAnswers = useCallback((cells: CrosswordCell[], clues: CrosswordClue[], onChange: (updates: {
-    cells?: CrosswordCell[];
-    clues?: CrosswordClue[];
-  }) => void) => {
+  const validateAnswers = useCallback(() => {
+    let totalCells = 0;
+    let correctCells = 0;
     const newCells = [...cells];
     const newClues = [...clues];
 
     clues.forEach(clue => {
       const { row, col } = clue.startCell;
-      const answer = clue.answer.split('');
+      const answer = clue.answer.toUpperCase().split('');
+      let clueCorrect = true;
 
       answer.forEach((letter, index) => {
         const currentRow = clue.direction === 'across' ? row : row + index;
         const currentCol = clue.direction === 'across' ? col + index : col;
-        const cell = getCellByPosition(currentRow, currentCol) ?? null;
+        const cell = getCellByPosition(currentRow, currentCol);
 
         if (cell) {
+          totalCells++;
           const cellIndex = cells.findIndex(c => c.id === cell.id);
-          if (cell.letter.toUpperCase() !== letter.toUpperCase()) {
-            newCells[cellIndex] = { ...cell, isCorrect: false };
+          const isCorrect = cell.letter.toUpperCase() === letter;
+          
+          if (isCorrect) {
+            correctCells++;
           } else {
-            newCells[cellIndex] = { ...cell, isCorrect: true };
+            clueCorrect = false;
           }
+
+          newCells[cellIndex] = { 
+            ...cell, 
+            isCorrect: isCorrect 
+          };
         }
       });
 
       const clueIndex = newClues.findIndex(c => c.id === clue.id);
-      newClues[clueIndex] = { ...clue, isValidated: true };
+      newClues[clueIndex] = { 
+        ...clue, 
+        isValidated: true,
+        isCorrect: clueCorrect
+      };
     });
 
+    const score = Math.round((correctCells / totalCells) * 100);
+    const message = `You got ${correctCells} out of ${totalCells} letters correct.`;
+
+    updateScore(id, score, 100);
+    updateProgress(id, score === 100);
+    setFeedback(id, score === 100, message);
+
     onChange({ cells: newCells, clues: newClues });
-  }, [getCellByPosition]);
+  }, [cells, clues, getCellByPosition, onChange, id, updateScore, updateProgress, setFeedback]);
 
   // Render grid
   const dimensions = gridDimensions();
@@ -284,15 +306,43 @@ export default function Crossword({
 
   return (
     <div className="space-y-6">
-      {!isPreviewMode && (
-        <button
-          onClick={() => validateAnswers(cells, clues, onChange)}
-          className="px-4 py-2 bg-purple-600 text-white rounded-lg
-                   hover:bg-purple-700 transition-colors duration-300"
-        >
-          Validate Answers
-        </button>
+      {isPreviewMode && (
+        <div className="flex justify-between items-center">
+          <div className="flex gap-2">
+            <button
+              onClick={() => setShowHints(!showHints)}
+              className={`px-4 py-2 rounded-lg flex items-center gap-2
+                       transition-colors duration-300
+                       ${showHints 
+                         ? 'bg-purple-600 text-white' 
+                         : 'border-2 border-gray-800 hover:bg-gray-100'}`}
+            >
+              {showHints ? <EyeOff size={16} /> : <Eye size={16} />}
+              {showHints ? 'Hide Hints' : 'Show Hints'}
+            </button>
+            <button
+              onClick={() => validateAnswers()}
+              className="px-4 py-2 bg-purple-600 text-white rounded-lg
+                       hover:bg-purple-700 transition-colors duration-300"
+            >
+              Check Answers
+            </button>
+          </div>
+
+          {state.feedback[id] && (
+            <div className={`p-4 rounded-lg ${
+              state.feedback[id].isCorrect ? 'bg-green-100' : 'bg-yellow-100'
+            }`}>
+              <p className={`text-sm ${
+                state.feedback[id].isCorrect ? 'text-green-700' : 'text-yellow-700'
+              }`}>
+                {state.feedback[id].message}
+              </p>
+            </div>
+          )}
+        </div>
       )}
+
       <div className="flex gap-6">
         {/* Crossword Grid */}
         <div className="relative">
@@ -325,7 +375,7 @@ export default function Crossword({
                     {!cell.isBlocked && (
                       <input
                         type="text"
-                        value={showAnswers && cell.isRevealed ? cell.letter : cell.letter}
+                        value={cell.letter}
                         maxLength={1}
                         onChange={(e) => {
                           const letter = e.target.value.toUpperCase();
@@ -334,79 +384,27 @@ export default function Crossword({
                         onKeyDown={(e) => handleKeyDown(e, cell.id)}
                         className="w-full h-full text-center text-base font-bold uppercase
                                  bg-transparent border-none focus:outline-none"
+                        disabled={isPreviewMode && cell.isRevealed}
                       />
                     )}
 
-                    {/* Add Cell Buttons - Show on group hover */}
                     {!isPreviewMode && (
                       <>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            handleAddCell(cell.id, 'up');
+                            handleCellUpdate(cell.id, { isBlocked: !cell.isBlocked });
                           }}
-                          className="absolute -top-3 left-1/2 transform -translate-x-1/2
-                                   p-1 bg-white rounded-full border border-gray-800
-                                   hover:bg-gray-100 transition-colors duration-300
-                                   opacity-0 group-hover:opacity-100 z-10"
+                          className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full
+                                   border border-gray-800 opacity-0 group-hover:opacity-100
+                                   transition-opacity duration-300 z-10"
                         >
-                          <Plus className="w-2 h-2" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddCell(cell.id, 'right');
-                          }}
-                          className="absolute top-1/2 -right-3 transform -translate-y-1/2
-                                   p-1 bg-white rounded-full border border-gray-800
-                                   hover:bg-gray-100 transition-colors duration-300
-                                   opacity-0 group-hover:opacity-100 z-10"
-                        >
-                          <Plus className="w-2 h-2" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddCell(cell.id, 'down');
-                          }}
-                          className="absolute -bottom-3 left-1/2 transform -translate-x-1/2
-                                   p-1 bg-white rounded-full border border-gray-800
-                                   hover:bg-gray-100 transition-colors duration-300
-                                   opacity-0 group-hover:opacity-100 z-10"
-                        >
-                          <Plus className="w-2 h-2" />
-                        </button>
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleAddCell(cell.id, 'left');
-                          }}
-                          className="absolute top-1/2 -left-3 transform -translate-y-1/2
-                                   p-1 bg-white rounded-full border border-gray-800
-                                   hover:bg-gray-100 transition-colors duration-300
-                                   opacity-0 group-hover:opacity-100 z-10"
-                        >
-                          <Plus className="w-2 h-2" />
+                          {cell.isBlocked ? 
+                            <X className="w-2 h-2" /> : 
+                            <Check className="w-2 h-2" />
+                          }
                         </button>
                       </>
-                    )}
-
-                    {/* Block Toggle */}
-                    {!isPreviewMode && (
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleCellUpdate(cell.id, { isBlocked: !cell.isBlocked });
-                        }}
-                        className="absolute -top-1 -right-1 w-3 h-3 bg-white rounded-full
-                                 border border-gray-800 opacity-0 group-hover:opacity-100
-                                 transition-opacity duration-300 z-10"
-                      >
-                        {cell.isBlocked ? 
-                          <X className="w-2 h-2" /> : 
-                          <Check className="w-2 h-2" />
-                        }
-                      </button>
                     )}
                   </motion.div>
                 );
@@ -419,53 +417,52 @@ export default function Crossword({
         <div className="flex-1 space-y-6">
           {/* Across Clues */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">Across</h3>
-              <button
-                onClick={() => addClue('across')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-300"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
+            <h3 className="text-lg font-bold mb-4">Across</h3>
             <div className="space-y-2">
-              {(clues || [])
+              {clues
                 .filter(clue => clue.direction === 'across')
                 .map(clue => (
                   <div
                     key={clue.id}
-                    className={`p-4 border-2 border-gray-800 rounded-lg
-                             ${selectedClue === clue.id ? 'ring-2 ring-purple-500' : ''}`}
+                    className={`p-4 border-2 rounded-lg
+                             ${selectedClue === clue.id ? 'ring-2 ring-purple-500' : ''}
+                             ${clue.isValidated && clue.isCorrect ? 'border-green-500 bg-green-50' : ''}
+                             ${clue.isValidated && !clue.isCorrect ? 'border-red-500 bg-red-50' : ''}
+                             ${!clue.isValidated ? 'border-gray-800' : ''}`}
                     onClick={() => setSelectedClue(clue.id)}
                   >
                     <div className="flex items-start gap-4">
                       <span className="font-bold">{clue.number}.</span>
                       <div className="flex-1">
-                        <input
-                          type="text"
-                          value={clue.text}
-                          onChange={(e) => handleClueUpdate(clue.id, { text: e.target.value })}
-                          placeholder="Enter clue..."
-                          className="w-full px-0 border-none focus:outline-none focus:ring-0"
-                        />
-                        <input
-                          type="text"
-                          value={clue.answer}
-                          onChange={(e) => handleClueUpdate(clue.id, { 
-                            answer: e.target.value.toUpperCase() 
-                          })}
-                          placeholder="Answer..."
-                          className="w-full px-0 mt-2 text-sm text-gray-500 border-none 
-                                   focus:outline-none focus:ring-0 uppercase"
-                        />
+                        {isPreviewMode ? (
+                          <p className="text-gray-900">{clue.text}</p>
+                        ) : (
+                          <input
+                            type="text"
+                            value={clue.text}
+                            onChange={(e) => handleClueUpdate(clue.id, { text: e.target.value })}
+                            placeholder="Enter clue..."
+                            className="w-full px-0 border-none focus:outline-none focus:ring-0"
+                          />
+                        )}
+                        {!isPreviewMode && (
+                          <input
+                            type="text"
+                            value={clue.answer}
+                            onChange={(e) => handleClueUpdate(clue.id, { 
+                              answer: e.target.value.toUpperCase() 
+                            })}
+                            placeholder="Answer..."
+                            className="w-full px-0 mt-2 text-sm text-gray-500 border-none 
+                                     focus:outline-none focus:ring-0 uppercase"
+                          />
+                        )}
+                        {isPreviewMode && showHints && (
+                          <p className="mt-2 text-sm text-gray-500">
+                            {clue.answer.length} letters
+                          </p>
+                        )}
                       </div>
-                      <button
-                        onClick={() => removeClue(clue.id)}
-                        className="p-2 text-red-500 rounded-lg opacity-0 hover:opacity-100
-                                 transition-opacity duration-300 hover:bg-red-50"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                 ))}
@@ -474,53 +471,52 @@ export default function Crossword({
 
           {/* Down Clues */}
           <div>
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-lg font-bold">Down</h3>
-              <button
-                onClick={() => addClue('down')}
-                className="p-2 hover:bg-gray-100 rounded-lg transition-colors duration-300"
-              >
-                <Plus className="w-4 h-4" />
-              </button>
-            </div>
+            <h3 className="text-lg font-bold mb-4">Down</h3>
             <div className="space-y-2">
-              {(clues || [])
+              {clues
                 .filter(clue => clue.direction === 'down')
                 .map(clue => (
                   <div
                     key={clue.id}
-                    className={`p-4 border-2 border-gray-800 rounded-lg
-                             ${selectedClue === clue.id ? 'ring-2 ring-purple-500' : ''}`}
+                    className={`p-4 border-2 rounded-lg
+                             ${selectedClue === clue.id ? 'ring-2 ring-purple-500' : ''}
+                             ${clue.isValidated && clue.isCorrect ? 'border-green-500 bg-green-50' : ''}
+                             ${clue.isValidated && !clue.isCorrect ? 'border-red-500 bg-red-50' : ''}
+                             ${!clue.isValidated ? 'border-gray-800' : ''}`}
                     onClick={() => setSelectedClue(clue.id)}
                   >
                     <div className="flex items-start gap-4">
                       <span className="font-bold">{clue.number}.</span>
                       <div className="flex-1">
-                        <input
-                          type="text"
-                          value={clue.text}
-                          onChange={(e) => handleClueUpdate(clue.id, { text: e.target.value })}
-                          placeholder="Enter clue..."
-                          className="w-full px-0 border-none focus:outline-none focus:ring-0"
-                        />
-                        <input
-                          type="text"
-                          value={clue.answer}
-                          onChange={(e) => handleClueUpdate(clue.id, { 
-                            answer: e.target.value.toUpperCase() 
-                          })}
-                          placeholder="Answer..."
-                          className="w-full px-0 mt-2 text-sm text-gray-500 border-none 
-                                   focus:outline-none focus:ring-0 uppercase"
-                        />
+                        {isPreviewMode ? (
+                          <p className="text-gray-900">{clue.text}</p>
+                        ) : (
+                          <input
+                            type="text"
+                            value={clue.text}
+                            onChange={(e) => handleClueUpdate(clue.id, { text: e.target.value })}
+                            placeholder="Enter clue..."
+                            className="w-full px-0 border-none focus:outline-none focus:ring-0"
+                          />
+                        )}
+                        {!isPreviewMode && (
+                          <input
+                            type="text"
+                            value={clue.answer}
+                            onChange={(e) => handleClueUpdate(clue.id, { 
+                              answer: e.target.value.toUpperCase() 
+                            })}
+                            placeholder="Answer..."
+                            className="w-full px-0 mt-2 text-sm text-gray-500 border-none 
+                                     focus:outline-none focus:ring-0 uppercase"
+                          />
+                        )}
+                        {isPreviewMode && showHints && (
+                          <p className="mt-2 text-sm text-gray-500">
+                            {clue.answer.length} letters
+                          </p>
+                        )}
                       </div>
-                      <button
-                        onClick={() => removeClue(clue.id)}
-                        className="p-2 text-red-500 rounded-lg opacity-0 hover:opacity-100
-                                 transition-opacity duration-300 hover:bg-red-50"
-                      >
-                        <Minus className="w-4 h-4" />
-                      </button>
                     </div>
                   </div>
                 ))}

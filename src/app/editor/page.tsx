@@ -2,7 +2,7 @@
 
 import { useState, useCallback, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Play, Save, Undo, Redo, Grid, ChevronLeft, ChevronRight } from 'lucide-react';
+import { Play, Save, Undo, Redo, Grid, ChevronLeft, ChevronRight, PlusSquare, Copy } from 'lucide-react';
 import EditorCanvas from './components/EditorCanvas';
 import ElementToolbar from './components/ElementToolbar';
 import PropertiesPanel from './components/PropertiesPanel';
@@ -10,8 +10,13 @@ import QuizTypeSelector from './components/QuizTypeSelector';
 import type { QuizType } from './components/QuizTypeSelector';
 import type { CanvasElement, ElementType, ElementContent, ElementStyles, GridPuzzleContent } from './types';
 import { quizPresets } from './presets';
+import { QuizStateProvider, useQuizState } from './components/quiz/QuizStateManager';
+import QuizProgress from './components/quiz/QuizProgress';
+import QuizSummary from './components/quiz/QuizSummary';
+import { isQuizElement } from './types';
+import PageIndicator from './components/quiz/PageIndicator';
 
-export default function Editor() {
+function EditorContent() {
   const [quizType, setQuizType] = useState<QuizType | null>(null);
   const [elements, setElements] = useState<CanvasElement[]>([]);
   const [selectedElement, setSelectedElement] = useState<string | null>(null);
@@ -24,6 +29,13 @@ export default function Editor() {
   const [isPropertiesPanelCollapsed, setIsPropertiesPanelCollapsed] = useState(false);
   const [draggedElement, setDraggedElement] = useState<ElementType | null>(null);
   const [dragPosition, setDragPosition] = useState({ x: 0, y: 0 });
+  const [showSummary, setShowSummary] = useState(false);
+  const { state, startQuiz, endQuiz, resetQuiz, loadQuizState, setTotalElements } = useQuizState();
+  const [pages, setPages] = useState<{ id: string; elements: CanvasElement[] }[]>([
+    { id: 'page-1', elements: [] }
+  ]);
+  const [currentPageIndex, setCurrentPageIndex] = useState(0);
+  const [isPageTransitioning, setIsPageTransitioning] = useState(false);
 
   // History management
   const addToHistory = useCallback((newElements: CanvasElement[]) => {
@@ -53,13 +65,32 @@ export default function Editor() {
     }
   }, [history, historyIndex]);
 
+  // Update elements state to use current page
+  useEffect(() => {
+    const currentPage = pages[currentPageIndex];
+    if (!currentPage) return;
+
+    // Skip if elements are the same (prevents unnecessary updates)
+    if (JSON.stringify(currentPage.elements) === JSON.stringify(elements)) return;
+    
+    setElements(currentPage.elements);
+  }, [currentPageIndex, pages, elements]);
+
+  // Save elements to current page
+  const updatePageElements = useCallback((newElements: CanvasElement[]) => {
+    setElements(newElements);
+    setPages(prev => prev.map((page, index) =>
+      index === currentPageIndex ? { ...page, elements: newElements } : page
+    ));
+  }, [currentPageIndex]);
+
   // Element deletion
   const handleElementDelete = useCallback((elementId: string) => {
     const newElements = elements.filter(element => element.id !== elementId);
-    setElements(newElements);
+    updatePageElements(newElements);
     setSelectedElement(null);
     addToHistory(newElements);
-  }, [elements, addToHistory]);
+  }, [elements, updatePageElements, addToHistory]);
 
   // Keyboard event handling
   useEffect(() => {
@@ -150,9 +181,9 @@ export default function Editor() {
     };
 
     const newElements = [...elements, newElement];
-    setElements(newElements);
+    updatePageElements(newElements);
     addToHistory(newElements);
-  }, [elements, addToHistory]);
+  }, [elements, updatePageElements, addToHistory]);
 
   const handleElementUpdate = useCallback((elementId: string, updates: Partial<{
     content: ElementContent;
@@ -168,9 +199,9 @@ export default function Editor() {
       }
       return element;
     });
-    setElements(newElements);
+    updatePageElements(newElements);
     addToHistory(newElements);
-  }, [elements, addToHistory]);
+  }, [elements, updatePageElements, addToHistory]);
 
   // Quiz type selection
   const handleQuizTypeSelect = (type: QuizType) => {
@@ -184,15 +215,33 @@ export default function Editor() {
       id: `${element.id}-${Date.now()}`,
       content: element.content
     }));
-    setElements(presetElements);
+    updatePageElements(presetElements);
     addToHistory(presetElements);
   };
 
-  // Preview mode
+  // Handle preview mode toggle
   const handlePreviewToggle = () => {
+    if (isPreviewMode) {
+      endQuiz();
+      setShowSummary(true);
+    } else {
+      startQuiz();
+    }
     setIsPreviewMode(!isPreviewMode);
     setSelectedElement(null);
   };
+
+  // Handle quiz restart
+  const handleQuizRestart = () => {
+    resetQuiz();
+    startQuiz();
+    setShowSummary(false);
+  };
+
+  // Try to load saved state on mount
+  useEffect(() => {
+    loadQuizState();
+  }, [loadQuizState]);
 
   // Save functionality
   const handleSave = async () => {
@@ -257,13 +306,87 @@ export default function Editor() {
     setDraggedElement(null);
   }, [draggedElement, handleElementAdd]);
 
+  // Handle page navigation
+  const handlePageChange = useCallback((direction: 'prev' | 'next') => {
+    const newIndex = direction === 'prev' ? currentPageIndex - 1 : currentPageIndex + 1;
+    if (newIndex >= 0 && newIndex < pages.length) {
+      setIsPageTransitioning(true);
+      setTimeout(() => {
+        setCurrentPageIndex(newIndex);
+        setIsPageTransitioning(false);
+      }, 300);
+    }
+  }, [currentPageIndex, pages.length]);
+
+  // Add new page
+  const handleAddPage = () => {
+    const newPage = {
+      id: `page-${pages.length + 1}`,
+      elements: []
+    };
+    setPages(prev => [...prev, newPage]);
+    setCurrentPageIndex(pages.length);
+  };
+
+  // Duplicate current page
+  const handleDuplicatePage = () => {
+    const currentPage = pages[currentPageIndex];
+    if (!currentPage) return;
+
+    const newPage = {
+      id: `page-${pages.length + 1}`,
+      elements: currentPage.elements.map(element => ({
+        ...element,
+        id: `${element.id}-copy-${Date.now()}`
+      }))
+    };
+    setPages(prev => [...prev.slice(0, currentPageIndex + 1), newPage, ...prev.slice(currentPageIndex + 1)]);
+    setCurrentPageIndex(currentPageIndex + 1);
+  };
+
+  // Auto-progress to next page in preview mode
+  useEffect(() => {
+    if (isPreviewMode) {
+      const currentPage = pages[currentPageIndex];
+      if (!currentPage) return;
+
+      const quizElements = currentPage.elements.filter(element => isQuizElement(element.type));
+      const completedElements = quizElements.filter(element => state.progress[element.id]?.completed);
+      
+      if (quizElements.length > 0 && completedElements.length === quizElements.length) {
+        if (currentPageIndex < pages.length - 1) {
+          // Add a small delay before auto-progressing
+          setTimeout(() => {
+            handlePageChange('next');
+          }, 1000);
+        } else {
+          // If this is the last page and all elements are complete, show the summary
+          endQuiz();
+          setShowSummary(true);
+        }
+      }
+    }
+  }, [isPreviewMode, state.progress, currentPageIndex, pages, handlePageChange, endQuiz]);
+
+  // Update quiz state with total elements across all pages
+  useEffect(() => {
+    const totalQuizElements = pages.reduce((total, page) => 
+      total + page.elements.filter(element => isQuizElement(element.type)).length, 0
+    );
+    
+    // Schedule the update for the next frame to prevent immediate re-renders
+    requestAnimationFrame(() => {
+      setTotalElements(totalQuizElements);
+    });
+  }, [pages, setTotalElements]);
+
   if (!quizType) {
     return <QuizTypeSelector onSelect={handleQuizTypeSelect} />;
   }
 
   return (
     <main className="min-h-screen p-4 md:p-8 bg-gradient-to-br from-gray-50 to-gray-100 
-                     font-architects-daughter relative overflow-hidden">
+                   font-architects-daughter relative overflow-hidden">
       {/* Background Pattern */}
       <div className="absolute inset-0 opacity-5 pointer-events-none">
         <div className="w-full h-full" style={{
@@ -275,13 +398,13 @@ export default function Editor() {
       <div className="max-w-[1920px] mx-auto">
         {/* Top Action Bar */}
         <div className="flex items-center gap-4 p-3 bg-white/90 backdrop-blur-sm border-2 
-                       border-gray-800 rounded-lg sticky top-4 z-50">
+                     border-gray-800 rounded-lg sticky top-4 z-50">
           <div className="flex items-center gap-2">
             <button 
               onClick={undo}
               disabled={historyIndex <= 0}
               className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-300 
-                       disabled:opacity-50 disabled:cursor-not-allowed"
+                     disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Undo size={20} />
             </button>
@@ -289,40 +412,86 @@ export default function Editor() {
               onClick={redo}
               disabled={historyIndex >= history.length - 1}
               className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-300
-                       disabled:opacity-50 disabled:cursor-not-allowed"
+                     disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Redo size={20} />
             </button>
             <button
               onClick={() => setShowGrid(!showGrid)}
               className={`p-2 rounded-lg transition-all duration-300 
-                         ${showGrid ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
+                       ${showGrid ? 'bg-gray-100' : 'hover:bg-gray-100'}`}
             >
               <Grid size={20} />
             </button>
           </div>
 
+          {/* Page Navigation */}
+          <div className="flex items-center gap-2 px-4 border-l-2 border-r-2 border-gray-200">
+            <button
+              onClick={() => handlePageChange('prev')}
+              disabled={currentPageIndex === 0}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronLeft size={20} />
+            </button>
+            <span className="font-medium">
+              Page {currentPageIndex + 1} of {pages.length}
+            </span>
+            <button
+              onClick={() => handlePageChange('next')}
+              disabled={currentPageIndex === pages.length - 1}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-colors
+                     disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              <ChevronRight size={20} />
+            </button>
+            {!isPreviewMode && (
+              <>
+                <button
+                  onClick={handleAddPage}
+                  className="p-2 hover:bg-purple-50 text-purple-600 rounded-lg 
+                         transition-colors"
+                  title="Add new page"
+                >
+                  <PlusSquare size={20} />
+                </button>
+                <button
+                  onClick={handleDuplicatePage}
+                  className="p-2 hover:bg-purple-50 text-purple-600 rounded-lg 
+                         transition-colors"
+                  title="Duplicate current page"
+                >
+                  <Copy size={20} />
+                </button>
+              </>
+            )}
+          </div>
+
           <div className="flex-1" />
 
           <div className="flex items-center gap-2">
+            {isPreviewMode && (
+              <QuizProgress />
+            )}
             <button 
               onClick={handlePreviewToggle}
               className={`px-4 py-2 border-2 border-gray-800 rounded-lg 
-                       transition-all duration-300 flex items-center gap-2
-                       transform hover:-translate-y-1 active:translate-y-0
-                       ${isPreviewMode ? 'bg-gray-800 text-white' : 'hover:bg-gray-100'}`}
+                     transition-all duration-300 flex items-center gap-2
+                     transform hover:-translate-y-1 active:translate-y-0
+                     ${isPreviewMode ? 'bg-gray-800 text-white' : 'hover:bg-gray-100'}`}
             >
               <Play size={20} />
-              {isPreviewMode ? 'Edit' : 'Preview'}
+              {isPreviewMode ? 'End Quiz' : 'Start Quiz'}
             </button>
             <button 
               onClick={handleSave}
               disabled={isSaving}
               className="px-4 py-2 bg-gradient-to-r from-purple-600 to-pink-600 
-                       text-white rounded-lg hover:from-purple-700 hover:to-pink-700 
-                       transition-all duration-300 flex items-center gap-2
-                       transform hover:-translate-y-1 active:translate-y-0 shadow-lg
-                       disabled:opacity-50 disabled:cursor-not-allowed"
+                     text-white rounded-lg hover:from-purple-700 hover:to-pink-700 
+                     transition-all duration-300 flex items-center gap-2
+                     transform hover:-translate-y-1 active:translate-y-0 shadow-lg
+                     disabled:opacity-50 disabled:cursor-not-allowed"
             >
               <Save size={20} />
               {isSaving ? 'Saving...' : 'Save'}
@@ -350,8 +519,8 @@ export default function Editor() {
               <button
                 onClick={() => setIsElementToolbarCollapsed(!isElementToolbarCollapsed)}
                 className="absolute -right-3 top-1/2 transform -translate-y-1/2 
-                         bg-white border-2 border-gray-800 rounded-full p-1 
-                         hover:bg-gray-100 transition-colors z-50"
+                       bg-white border-2 border-gray-800 rounded-full p-1 
+                       hover:bg-gray-100 transition-colors z-50"
               >
                 {isElementToolbarCollapsed ? 
                   <ChevronRight size={16} /> : 
@@ -361,8 +530,16 @@ export default function Editor() {
             </motion.div>
           )}
 
-          {/* Center Canvas */}
-          <div className="flex-1 relative">
+          {/* Canvas with Page Transition */}
+          <motion.div 
+            className="flex-1 relative"
+            initial={false}
+            animate={{
+              opacity: isPageTransitioning ? 0 : 1,
+              x: isPageTransitioning ? (currentPageIndex === 0 ? 20 : -20) : 0
+            }}
+            transition={{ duration: 0.3 }}
+          >
             <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-gray-800" />
             <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-gray-800" />
             <EditorCanvas
@@ -376,7 +553,7 @@ export default function Editor() {
               onDrop={handleDrop}
               className="editor-canvas"
             />
-          </div>
+          </motion.div>
 
           {/* Right Properties Panel - Hidden in preview mode */}
           {!isPreviewMode && (
@@ -390,32 +567,14 @@ export default function Editor() {
             >
               <PropertiesPanel
                 selectedElement={selectedElement ? elements.find(e => e.id === selectedElement) ?? null : null}
-                onUpdate={(elementId, updates) => {
-                  const element = elements.find(e => e.id === elementId);
-                  if (element) {
-                    if (element.type === 'grid-puzzle') {
-                      const gridContent = element.content as GridPuzzleContent;
-                      const updatedContent = updates.content as Partial<GridPuzzleContent>;
-                      handleElementUpdate(elementId, {
-                        content: {
-                          ...gridContent,
-                          ...updatedContent,
-                          cells: updatedContent?.cells ?? gridContent.cells,
-                          revealStyle: gridContent.revealStyle
-                        }
-                      });
-                    } else {
-                      handleElementUpdate(elementId, updates);
-                    }
-                  }
-                }}
+                onUpdate={handleElementUpdate}
                 isCollapsed={isPropertiesPanelCollapsed}
               />
               <button
                 onClick={() => setIsPropertiesPanelCollapsed(!isPropertiesPanelCollapsed)}
                 className="absolute -left-3 top-1/2 transform -translate-y-1/2 
-                         bg-white border-2 border-gray-800 rounded-full p-1 
-                         hover:bg-gray-100 transition-colors z-50"
+                       bg-white border-2 border-gray-800 rounded-full p-1 
+                       hover:bg-gray-100 transition-colors z-50"
               >
                 {isPropertiesPanelCollapsed ? 
                   <ChevronLeft size={16} /> : 
@@ -426,6 +585,14 @@ export default function Editor() {
           )}
         </div>
       </div>
+
+      {/* Quiz Summary Modal */}
+      {showSummary && (
+        <QuizSummary
+          onRestart={handleQuizRestart}
+          onClose={() => setShowSummary(false)}
+        />
+      )}
 
       {/* Dragged Element Preview */}
       {draggedElement && (
@@ -440,11 +607,32 @@ export default function Editor() {
           transition={{ type: "spring", damping: 20, stiffness: 300 }}
         >
           <div className="w-[100px] h-[100px] bg-white/90 backdrop-blur-sm 
-                       border-2 border-gray-800 rounded-lg flex items-center 
-                       justify-center shadow-xl">
+                     border-2 border-gray-800 rounded-lg flex items-center 
+                     justify-center shadow-xl">
             {draggedElement.icon}
           </div>
         </motion.div>
+      )}
+
+      {/* Page Transition Overlay */}
+      <AnimatePresence>
+        {isPageTransitioning && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black/10 backdrop-blur-sm z-40 pointer-events-none"
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Page Indicator in Preview Mode */}
+      {isPreviewMode && (
+        <PageIndicator
+          currentPage={currentPageIndex}
+          totalPages={pages.length}
+          pageElements={pages[currentPageIndex]?.elements ?? []}
+        />
       )}
 
       {/* Toast Notifications */}
@@ -452,5 +640,13 @@ export default function Editor() {
         {/* Add toast notifications here */}
       </AnimatePresence>
     </main>
+  );
+}
+
+export default function Editor() {
+  return (
+    <QuizStateProvider>
+      <EditorContent />
+    </QuizStateProvider>
   );
 } 

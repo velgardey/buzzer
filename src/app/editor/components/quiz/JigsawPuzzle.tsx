@@ -2,48 +2,20 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { Image as ImageIcon, Settings, Shuffle, RotateCcw } from 'lucide-react';
 import Image from 'next/image';
-
-interface PuzzlePiece {
-  id: string;
-  imageUrl: string;
-  originalIndex: number;
-  currentIndex: number;
-  isCorrect: boolean;
-  rotation: number;
-  x: number;
-  y: number;
-}
-
-interface JigsawPuzzleProps {
-  imageUrl: string;
-  rows: number;
-  columns: number;
-  difficulty: 'easy' | 'medium' | 'hard';
-  allowRotation: boolean;
-  showPreview: boolean;
-  onChange: (updates: {
-    imageUrl?: string;
-    rows?: number;
-    columns?: number;
-    pieces?: PuzzlePiece[];
-    difficulty?: 'easy' | 'medium' | 'hard';
-    allowRotation?: boolean;
-    showPreview?: boolean;
-  }) => void;
-  isPreviewMode?: boolean;
-}
+import type { JigsawPuzzleProps, PuzzlePiece } from '../../types';
 
 export default function JigsawPuzzle({
   imageUrl,
-  rows = 3,
-  columns = 3,
-  difficulty = 'medium',
-  allowRotation = true,
-  showPreview = false,
+  rows,
+  columns,
+  difficulty,
+  allowRotation,
+  showPreview,
+  pieces,
   onChange,
   isPreviewMode = false
 }: JigsawPuzzleProps) {
-  const [pieces, setPieces] = useState<PuzzlePiece[]>([]);
+  const [piecesState, setPieces] = useState<PuzzlePiece[]>(pieces);
   const [isDragging, setIsDragging] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const canvasRef = useRef<HTMLCanvasElement>(null);
@@ -61,19 +33,19 @@ export default function JigsawPuzzle({
   }, []);
 
   const handlePieceDrop = useCallback((pieceId: string, x: number, y: number) => {
-    const updatedPieces = pieces.map(p => 
-      p.id === pieceId ? { ...p, x, y } : p
+    const updatedPieces = piecesState.map(p => 
+      p.id === pieceId ? { ...p, x, y, isPlaced: false } : p
     );
     setPieces(updatedPieces);
     onChange({ pieces: updatedPieces });
-  }, [pieces, onChange]);
+  }, [piecesState, onChange]);
 
   const handlePieceRotate = useCallback((pieceId: string) => {
     if (!allowRotation) return;
     setPieces(prevPieces => {
       const newPieces = prevPieces.map(piece =>
         piece.id === pieceId 
-          ? { ...piece, rotation: (piece.rotation + 90) % 360 } 
+          ? { ...piece, rotation: (piece.rotation + 90) % 360, isPlaced: false } 
           : piece
       );
       onChange({ pieces: newPieces });
@@ -82,25 +54,27 @@ export default function JigsawPuzzle({
   }, [onChange, allowRotation]);
 
   const shufflePieces = useCallback(() => {
-    const shuffled = shufflePuzzlePieces(pieces);
+    const shuffled = shufflePuzzlePieces(piecesState);
     const updatedPieces = shuffled.map(piece => ({
       ...piece,
-      isCorrect: piece.currentIndex === piece.originalIndex && piece.rotation === 0
+      isCorrect: piece.currentIndex === piece.originalIndex && piece.rotation === 0,
+      isPlaced: false
     }));
     setPieces(updatedPieces);
     onChange({ pieces: updatedPieces });
-  }, [pieces, shufflePuzzlePieces, onChange]);
+  }, [piecesState, shufflePuzzlePieces, onChange]);
 
   const resetPuzzle = useCallback(() => {
-    const newPieces = pieces.map(piece => ({
+    const newPieces = piecesState.map(piece => ({
       ...piece,
       currentIndex: piece.originalIndex,
       rotation: 0,
-      isCorrect: true
+      isCorrect: true,
+      isPlaced: true
     }));
     setPieces(newPieces);
     onChange({ pieces: newPieces });
-  }, [pieces, onChange]);
+  }, [piecesState, onChange]);
 
   const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -160,7 +134,8 @@ export default function JigsawPuzzle({
                 imageUrl: pieceCanvas.toDataURL(),
                 originalIndex: index,
                 currentIndex: index,
-                isCorrect: false,
+                isCorrect: true,
+                isPlaced: true,
                 rotation: 0,
                 x: x * pieceWidth,
                 y: y * pieceHeight
@@ -303,7 +278,7 @@ export default function JigsawPuzzle({
           gridTemplateRows: `repeat(${rows}, 1fr)`,
         }}
       >
-        {pieces.map((piece) => (
+        {piecesState.map((piece) => (
           <motion.div
             key={piece.id}
             layoutId={piece.id}

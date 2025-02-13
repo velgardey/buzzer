@@ -1,29 +1,13 @@
 import { useState, useCallback, useEffect, useRef } from 'react';
 import { Play, Pause, RotateCcw, Settings } from 'lucide-react';
-
-interface TimerProps {
-  initialTime: number; // in seconds
-  countDirection: 'up' | 'down';
-  format: '24hour' | 'minutes' | 'seconds';
-  autoStart: boolean;
-  showControls: boolean;
-  onTimeEnd?: () => void;
-  onChange: (updates: {
-    initialTime?: number;
-    countDirection?: 'up' | 'down';
-    format?: '24hour' | 'minutes' | 'seconds';
-    autoStart?: boolean;
-    showControls?: boolean;
-  }) => void;
-  isPreviewMode?: boolean;
-}
+import type { TimerProps } from '../../types';
 
 export default function Timer({
   initialTime,
-  countDirection = 'down',
-  format = 'minutes',
-  autoStart = false,
-  showControls = true,
+  countDirection,
+  format,
+  autoStart,
+  showControls,
   onTimeEnd,
   onChange,
   isPreviewMode = false

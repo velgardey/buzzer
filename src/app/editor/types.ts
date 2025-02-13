@@ -74,9 +74,21 @@ export interface GridPuzzleContent {
 export interface TimerContent {
   initialTime: number;
   countDirection: 'up' | 'down';
-  format: 'seconds' | 'minutes' | 'hours';
+  format: 'seconds' | 'minutes' | '24hour';
   autoStart: boolean;
   showControls: boolean;
+}
+
+export interface PuzzlePiece {
+  id: string;
+  x: number;
+  y: number;
+  rotation: number;
+  isPlaced: boolean;
+  imageUrl: string;
+  originalIndex: number;
+  currentIndex: number;
+  isCorrect: boolean;
 }
 
 export interface JigsawContent {
@@ -86,13 +98,7 @@ export interface JigsawContent {
   difficulty: 'easy' | 'medium' | 'hard';
   allowRotation: boolean;
   showPreview: boolean;
-  pieces: Array<{
-    id: string;
-    x: number;
-    y: number;
-    rotation: number;
-    isPlaced: boolean;
-  }>;
+  pieces: PuzzlePiece[];
 }
 
 export interface MediaContent {
@@ -150,4 +156,62 @@ export interface ElementType {
   category: 'basic' | 'media' | 'layout' | 'quiz';
   defaultWidth: number;
   defaultHeight: number;
+}
+
+// Define quiz element types
+export type QuizElementType = 'multiple-choice' | 'crossword' | 'grid-puzzle' | 'map-quiz' | 'jigsaw';
+
+// Add isQuizElement helper
+export const isQuizElement = (type: string): boolean => {
+  const quizElements: QuizElementType[] = ['multiple-choice', 'crossword', 'grid-puzzle', 'map-quiz', 'jigsaw'];
+  return quizElements.includes(type as QuizElementType);
+};
+
+// Quiz component props
+export interface QuizComponentProps {
+  id: string;
+  isPreviewMode?: boolean;
+}
+
+export interface MapQuizProps extends QuizComponentProps {
+  mapImage: string;
+  markers: Array<{
+    id: string;
+    x: number;
+    y: number;
+    label: string;
+    hint?: string;
+    isCorrect: boolean;
+    tolerance?: number;
+  }>;
+  regions: Array<{
+    id: string;
+    points: Array<{ x: number; y: number }>;
+    label: string;
+    hint?: string;
+    isCorrect: boolean;
+  }>;
+  mode: 'markers' | 'regions';
+  onChange: (updates: Partial<Omit<MapQuizContent, 'id'>>) => void;
+}
+
+export interface JigsawPuzzleProps extends QuizComponentProps {
+  imageUrl: string;
+  rows: number;
+  columns: number;
+  difficulty: 'easy' | 'medium' | 'hard';
+  allowRotation: boolean;
+  showPreview: boolean;
+  pieces: PuzzlePiece[];
+  onChange: (updates: Partial<Omit<JigsawContent, 'id'>>) => void;
+}
+
+export interface TimerProps extends QuizComponentProps {
+  initialTime: number;
+  countDirection: 'up' | 'down';
+  format: 'seconds' | 'minutes' | '24hour';
+  autoStart: boolean;
+  showControls: boolean;
+  onTimeEnd?: () => void;
+  onChange: (updates: Partial<Omit<TimerContent, 'id'>>) => void;
 } 

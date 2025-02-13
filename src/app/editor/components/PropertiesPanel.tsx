@@ -1,11 +1,10 @@
 import { useState } from 'react';
 import { 
-  Palette, Type, Layout, Image as ImageIcon, 
-  Eye, EyeOff, Lock, Unlock, Timer
+  Palette, Type, Eye, EyeOff, Lock, Unlock,
+  AlignLeft, AlignCenter, AlignRight, AlignJustify,
+  RotateCcw, Layers, Move
 } from 'lucide-react';
 import type { CanvasElement, ElementContent } from '../types';
-import MediaUploader from './MediaUploader';
-import QuizSettings from './quiz/QuizSettings';
 
 interface StyleOption {
   label: string;
@@ -26,39 +25,17 @@ const fontSizes: StyleOption[] = [
   { label: 'Extra Large', value: 'text-xl' }
 ];
 
+const alignments: StyleOption[] = [
+  { label: 'Left', value: 'text-left' },
+  { label: 'Center', value: 'text-center' },
+  { label: 'Right', value: 'text-right' },
+  { label: 'Justify', value: 'text-justify' }
+];
+
 interface Section {
   id: string;
   title: string;
   icon: JSX.Element;
-}
-
-interface MediaFile {
-  id: string;
-  file: File;
-  preview: string;
-  type: 'image' | 'video' | 'audio';
-}
-
-interface MediaContent {
-  src: string;
-  alt: string;
-  type: 'image' | 'video' | 'audio';
-}
-
-interface QuizSettingsType {
-  title: string;
-  description: string;
-  timeLimit?: number;
-  shuffleQuestions: boolean;
-  shuffleOptions: boolean;
-  showResults: boolean;
-  passingScore: number;
-  attemptsAllowed: number;
-  isPublic: boolean;
-  requireLogin: boolean;
-  showFeedback: boolean;
-  categories: string[];
-  tags: string[];
 }
 
 interface PropertiesPanelProps {
@@ -72,10 +49,7 @@ interface PropertiesPanelProps {
 
 const sections: Section[] = [
   { id: 'style', title: 'Style', icon: <Palette className="w-5 h-5" /> },
-  { id: 'typography', title: 'Typography', icon: <Type className="w-5 h-5" /> },
-  { id: 'layout', title: 'Layout', icon: <Layout className="w-5 h-5" /> },
-  { id: 'media', title: 'Media', icon: <ImageIcon className="w-5 h-5" /> },
-  { id: 'timing', title: 'Timing', icon: <Timer className="w-5 h-5" /> }
+  { id: 'typography', title: 'Typography', icon: <Type className="w-5 h-5" /> }
 ];
 
 export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed }: PropertiesPanelProps) {
@@ -85,7 +59,6 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
 
   const handleUpdate = (styleUpdates: Partial<Record<string, string | number>>) => {
     if (selectedElement) {
-      // Convert partial record to full record by removing undefined values
       const fullStyleUpdates = Object.fromEntries(
         Object.entries(styleUpdates).filter(([_, value]) => value !== undefined)
       ) as Record<string, string | number>;
@@ -93,43 +66,23 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
     }
   };
 
-  const handleMediaUpload = (files: MediaFile[]) => {
-    if (!selectedElement || !files.length) return;
-    const firstFile = files[0];
-    if (!firstFile) return;
-    
-    const mediaContent: MediaContent = {
-      src: firstFile.preview,
-      alt: firstFile.file.name,
-      type: firstFile.type
-    };
-    
-    onUpdate(selectedElement.id, {
-      content: mediaContent
-    });
-  };
-
-  const handleMediaDelete = (_fileId: string) => {
-    if (!selectedElement) return;
-    const mediaContent: MediaContent = {
-      src: '',
-      alt: '',
-      type: 'image'
-    };
-    
-    onUpdate(selectedElement.id, {
-      content: mediaContent
-    });
-  };
-
-  const handleQuizSettingsChange = (updates: Partial<QuizSettingsType>) => {
-    if (!selectedElement) return;
-    onUpdate(selectedElement.id, {
-      content: {
-        ...selectedElement.content,
-        ...updates
-      } as ElementContent
-    });
+  const handleReset = () => {
+    if (selectedElement) {
+      onUpdate(selectedElement.id, { 
+        styles: {
+          backgroundColor: '#ffffff',
+          color: '#000000',
+          borderColor: '#000000',
+          borderWidth: 2,
+          borderRadius: 8,
+          opacity: 100,
+          padding: 16,
+          fontFamily: 'font-architects-daughter',
+          fontSize: 'text-base',
+          textAlign: 'text-left'
+        }
+      });
+    }
   };
 
   const ColorPicker = ({ label, value, onChange }: { 
@@ -138,8 +91,14 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
     onChange: (value: string) => void;
   }) => (
     <div className="flex items-center gap-2">
-      <label className="text-sm text-gray-600">{label}</label>
-      <div className="relative">
+      <label className="text-sm text-gray-600 flex-1">{label}</label>
+      <div className="relative flex items-center gap-2">
+        <input
+          type="text"
+          value={value}
+          onChange={(e) => onChange(e.target.value)}
+          className="w-24 px-2 py-1 text-sm border-2 border-gray-800 rounded-lg"
+        />
         <input
           type="color"
           value={value}
@@ -176,35 +135,93 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
     </div>
   );
 
-  const Slider = ({ label, min, max, value, onChange }: {
+  const Slider = ({ label, min, max, value, onChange, unit = '' }: {
     label: string;
     min: number;
     max: number;
     value: number;
     onChange: (value: number) => void;
-  }) => (
-    <div className="space-y-1">
-      <div className="flex justify-between">
-        <label className="text-sm text-gray-600">{label}</label>
-        <span className="text-sm text-gray-500">{value}</span>
+    unit?: string;
+  }) => {
+    // Calculate appropriate step based on range
+    const range = max - min;
+    const step = range <= 10 ? 0.1 : range <= 100 ? 1 : 5;
+
+    // Debounce the onChange handler for smoother updates
+    const handleChange = (newValue: number) => {
+      // Clamp the value between min and max
+      const clampedValue = Math.min(Math.max(newValue, min), max);
+      // Round to 1 decimal place for small ranges, otherwise whole numbers
+      const roundedValue = range <= 10 ? 
+        Math.round(clampedValue * 10) / 10 : 
+        Math.round(clampedValue);
+      onChange(roundedValue);
+    };
+
+    return (
+      <div className="space-y-1">
+        <div className="flex justify-between">
+          <label className="text-sm text-gray-600">{label}</label>
+          <span className="text-sm text-gray-500">{value}{unit}</span>
+        </div>
+        <div className="flex items-center gap-2">
+          <input
+            type="range"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => handleChange(Number(e.target.value))}
+            className="flex-1 h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer
+                     focus:outline-none focus:ring-2 focus:ring-purple-500
+                     [&::-webkit-slider-thumb]:appearance-none
+                     [&::-webkit-slider-thumb]:w-4
+                     [&::-webkit-slider-thumb]:h-4
+                     [&::-webkit-slider-thumb]:rounded-full
+                     [&::-webkit-slider-thumb]:bg-purple-600
+                     [&::-webkit-slider-thumb]:cursor-pointer
+                     [&::-webkit-slider-thumb]:border-2
+                     [&::-webkit-slider-thumb]:border-white
+                     [&::-webkit-slider-thumb]:shadow-md
+                     [&::-webkit-slider-thumb]:transition-all
+                     [&::-webkit-slider-thumb]:duration-150
+                     [&::-webkit-slider-thumb]:hover:scale-110
+                     [&::-moz-range-thumb]:appearance-none
+                     [&::-moz-range-thumb]:w-4
+                     [&::-moz-range-thumb]:h-4
+                     [&::-moz-range-thumb]:rounded-full
+                     [&::-moz-range-thumb]:bg-purple-600
+                     [&::-moz-range-thumb]:cursor-pointer
+                     [&::-moz-range-thumb]:border-2
+                     [&::-moz-range-thumb]:border-white
+                     [&::-moz-range-thumb]:shadow-md
+                     [&::-moz-range-thumb]:transition-all
+                     [&::-moz-range-thumb]:duration-150
+                     [&::-moz-range-thumb]:hover:scale-110"
+          />
+          <input
+            type="number"
+            min={min}
+            max={max}
+            step={step}
+            value={value}
+            onChange={(e) => handleChange(Number(e.target.value))}
+            onBlur={(e) => {
+              // Ensure the value is clamped on blur
+              handleChange(Number(e.target.value));
+            }}
+            className="w-16 px-2 py-1 text-sm border-2 border-gray-800 rounded-lg
+                     focus:outline-none focus:ring-2 focus:ring-purple-500"
+          />
+        </div>
       </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="w-full h-2 bg-gray-200 rounded-lg appearance-none cursor-pointer
-                 focus:outline-none focus:ring-2 focus:ring-purple-500"
-      />
-    </div>
-  );
+    );
+  };
 
   if (isCollapsed) {
     return (
       <div className="w-10 h-full bg-white/90 backdrop-blur-sm border-2 border-gray-800 
                     rounded-lg overflow-hidden relative flex flex-col items-center py-4 gap-4">
-        {/* Decorative Corner Lines */}
         <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-gray-800" />
         <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-gray-800" />
         
@@ -223,10 +240,22 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
     );
   }
 
+  if (!selectedElement) {
+    return (
+      <div className="w-80 h-full bg-white/90 backdrop-blur-sm border-2 border-gray-800 
+                    rounded-lg overflow-hidden relative flex items-center justify-center">
+        <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-gray-800" />
+        <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-gray-800" />
+        <p className="text-gray-500 text-center p-4">
+          Select an element to edit its properties
+        </p>
+      </div>
+    );
+  }
+
   return (
     <div className="w-80 h-full bg-white/90 backdrop-blur-sm border-2 border-gray-800 
                     rounded-lg overflow-hidden relative">
-      {/* Decorative Corner Lines */}
       <div className="absolute -top-2 -left-2 w-4 h-4 border-t-2 border-l-2 border-gray-800" />
       <div className="absolute -bottom-2 -right-2 w-4 h-4 border-b-2 border-r-2 border-gray-800" />
 
@@ -239,6 +268,7 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
               onClick={() => setVisibility(!visibility)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-300
                        transform hover:-translate-y-1 active:translate-y-0"
+              title={visibility ? 'Hide Element' : 'Show Element'}
             >
               {visibility ? <Eye size={20} /> : <EyeOff size={20} />}
             </button>
@@ -246,14 +276,23 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
               onClick={() => setLocked(!locked)}
               className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-300
                        transform hover:-translate-y-1 active:translate-y-0"
+              title={locked ? 'Unlock Element' : 'Lock Element'}
             >
               {locked ? <Lock size={20} /> : <Unlock size={20} />}
+            </button>
+            <button
+              onClick={handleReset}
+              className="p-2 hover:bg-gray-100 rounded-lg transition-all duration-300
+                       transform hover:-translate-y-1 active:translate-y-0"
+              title="Reset Styles"
+            >
+              <RotateCcw size={20} />
             </button>
           </div>
         </div>
 
         {/* Section Tabs */}
-        <div className="flex gap-2 overflow-x-auto pb-2">
+        <div className="flex gap-2">
           {sections.map((section) => (
             <button
               key={section.id}
@@ -274,121 +313,114 @@ export default function PropertiesPanel({ selectedElement, onUpdate, isCollapsed
 
       {/* Content */}
       <div className="p-4 space-y-6 max-h-[calc(100vh-12rem)] overflow-y-auto thin-scrollbar">
+        {/* Element Info */}
+        <div className="p-3 bg-gray-50 rounded-lg space-y-2">
+          <div className="flex items-center gap-2">
+            <Move className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Position: {selectedElement.x}, {selectedElement.y}</span>
+          </div>
+          <div className="flex items-center gap-2">
+            <Layers className="w-4 h-4 text-gray-500" />
+            <span className="text-sm text-gray-600">Size: {selectedElement.width} × {selectedElement.height}</span>
+          </div>
+        </div>
+
         {activeSection === 'style' && (
           <>
-            <ColorPicker
-              label="Background Color"
-              value="#ffffff"
-              onChange={(value) => handleUpdate({ backgroundColor: value })}
-            />
-            <ColorPicker
-              label="Border Color"
-              value="#000000"
-              onChange={(value) => handleUpdate({ borderColor: value })}
-            />
-            <Slider
-              label="Opacity"
-              min={0}
-              max={100}
-              value={100}
-              onChange={(value) => handleUpdate({ opacity: value })}
-            />
-            <Slider
-              label="Border Width"
-              min={0}
-              max={10}
-              value={2}
-              onChange={(value) => handleUpdate({ borderWidth: value })}
-            />
+            <div className="space-y-4">
+              <ColorPicker
+                label="Background"
+                value={selectedElement.styles.backgroundColor ?? '#ffffff'}
+                onChange={(value) => handleUpdate({ backgroundColor: value })}
+              />
+              <ColorPicker
+                label="Border Color"
+                value={selectedElement.styles.borderColor ?? '#000000'}
+                onChange={(value) => handleUpdate({ borderColor: value })}
+              />
+              <Slider
+                label="Border Width"
+                min={0}
+                max={10}
+                value={Number(selectedElement.styles.borderWidth ?? 2)}
+                onChange={(value) => handleUpdate({ borderWidth: value })}
+                unit="px"
+              />
+              <Slider
+                label="Border Radius"
+                min={0}
+                max={50}
+                value={Number(selectedElement.styles.borderRadius ?? 8)}
+                onChange={(value) => handleUpdate({ borderRadius: value })}
+                unit="px"
+              />
+              <Slider
+                label="Opacity"
+                min={0}
+                max={100}
+                value={Number(selectedElement.styles.opacity ?? 100)}
+                onChange={(value) => handleUpdate({ opacity: value })}
+                unit="%"
+              />
+              <Slider
+                label="Padding"
+                min={0}
+                max={100}
+                value={Number(selectedElement.styles.padding ?? 16)}
+                onChange={(value) => handleUpdate({ padding: value })}
+                unit="px"
+              />
+            </div>
           </>
         )}
 
         {activeSection === 'typography' && (
           <>
-            <Select
-              label="Font Family"
-              options={fontFamilies}
-              value="font-architects-daughter"
-              onChange={(value) => handleUpdate({ fontFamily: value })}
-            />
-            <Select
-              label="Font Size"
-              options={fontSizes}
-              value="text-base"
-              onChange={(value) => handleUpdate({ fontSize: value })}
-            />
-            <ColorPicker
-              label="Text Color"
-              value="#000000"
-              onChange={(value) => handleUpdate({ color: value })}
-            />
+            <div className="space-y-4">
+              <ColorPicker
+                label="Text Color"
+                value={String(selectedElement.styles.color ?? '#000000')}
+                onChange={(value) => handleUpdate({ color: value })}
+              />
+              <Select
+                label="Font Family"
+                options={fontFamilies}
+                value={String(selectedElement.styles.fontFamily ?? 'font-architects-daughter')}
+                onChange={(value) => handleUpdate({ fontFamily: value })}
+              />
+              <Select
+                label="Font Size"
+                options={fontSizes}
+                value={typeof selectedElement.styles.fontSize === 'number' 
+                  ? `text-${selectedElement.styles.fontSize}` 
+                  : (selectedElement.styles.fontSize ?? 'text-base')}
+                onChange={(value) => handleUpdate({ fontSize: value })}
+              />
+              <div className="space-y-2">
+                <label className="text-sm text-gray-600">Text Alignment</label>
+                <div className="flex gap-2">
+                  {[
+                    { icon: <AlignLeft size={16} />, value: 'text-left' },
+                    { icon: <AlignCenter size={16} />, value: 'text-center' },
+                    { icon: <AlignRight size={16} />, value: 'text-right' },
+                    { icon: <AlignJustify size={16} />, value: 'text-justify' }
+                  ].map((align) => (
+                    <button
+                      key={align.value}
+                      onClick={() => handleUpdate({ textAlign: align.value })}
+                      className={`p-2 rounded-lg transition-all duration-300
+                               ${selectedElement.styles.textAlign === align.value 
+                                 ? 'bg-gray-800 text-white' 
+                                 : 'hover:bg-gray-100'}`}
+                    >
+                      {align.icon}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            </div>
           </>
         )}
-
-        {activeSection === 'layout' && (
-          <>
-            <Slider
-              label="Width"
-              min={0}
-              max={1000}
-              value={200}
-              onChange={(value) => handleUpdate({ width: value })}
-            />
-            <Slider
-              label="Height"
-              min={0}
-              max={1000}
-              value={200}
-              onChange={(value) => handleUpdate({ height: value })}
-            />
-            <Slider
-              label="Padding"
-              min={0}
-              max={100}
-              value={16}
-              onChange={(value) => handleUpdate({ padding: value })}
-            />
-            <Slider
-              label="Border Radius"
-              min={0}
-              max={50}
-              value={8}
-              onChange={(value) => handleUpdate({ borderRadius: value })}
-            />
-          </>
-        )}
-
-        {activeSection === 'media' && selectedElement && (
-          <MediaUploader
-            onUpload={handleMediaUpload}
-            onDelete={handleMediaDelete}
-            maxFiles={1}
-            acceptedTypes={['image/*', 'video/*', 'audio/*']}
-          />
-        )}
-
-        {activeSection === 'timing' && selectedElement && (
-          <QuizSettings
-            settings={{
-              title: '',
-              description: '',
-              shuffleQuestions: false,
-              shuffleOptions: false,
-              showResults: true,
-              passingScore: 70,
-              attemptsAllowed: 1,
-              isPublic: true,
-              requireLogin: false,
-              showFeedback: true,
-              categories: [],
-              tags: [],
-              ...selectedElement.content as Partial<QuizSettingsType>
-            }}
-            onChange={handleQuizSettingsChange}
-          />
-        )}
-
-        {/* Add more sections as needed */}
       </div>
     </div>
   );

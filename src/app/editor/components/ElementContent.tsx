@@ -7,7 +7,9 @@ import type {
   MapQuizContent,
   JigsawContent,
   TimerContent,
-  GridPuzzleContent
+  GridPuzzleContent,
+  CrosswordContent,
+  TextContent
 } from '../types';
 import MultipleChoice from './quiz/MultipleChoice';
 import GridPuzzle from './quiz/GridPuzzle';
@@ -15,10 +17,14 @@ import TimerComponent from './quiz/Timer';
 import JigsawPuzzle from './quiz/JigsawPuzzle';
 import MapQuiz from './quiz/MapQuiz';
 import Image from 'next/image';
+import Crossword from './quiz/Crossword';
 
 interface ElementContentProps {
   element: CanvasElement;
-  onUpdate: (elementId: string, updates: Partial<CanvasElement>) => void;
+  onUpdate: (elementId: string, updates: {
+    content?: ElementContentType;
+    styles?: Record<string, string | number>;
+  }) => void;
   isPreviewMode?: boolean;
 }
 
@@ -51,19 +57,23 @@ export default function ElementContent({ element, onUpdate, isPreviewMode = fals
 
   switch (element.type) {
     case 'text':
+      const textContent = element.content as TextContent;
+      if (isPreviewMode) {
+        return wrapWithContainer(
+          <div
+            className="w-full h-full p-4 cursor-text"
+          >
+            {textContent.text || 'Click to edit text...'}
+          </div>
+        );
+      }
       return wrapWithContainer(
         <textarea
-          value={(element.content as { text: string }).text ?? ''}
-          onChange={(e) => onUpdate(element.id, {
-            content: { text: e.target.value }
-          })}
-          placeholder="Enter text here..."
-          className="w-full h-full resize-none border-none bg-transparent
-                   focus:outline-none focus:ring-0 font-architects-daughter"
-          style={{
-            fontSize: element.styles.fontSize ?? '16px',
-            color: element.styles.color ?? '#000000',
-          }}
+          className="w-full h-full p-4 border-none focus:outline-none resize-none bg-transparent"
+          value={textContent.text || ''}
+          onChange={(e) => onUpdate(element.id, { content: { text: e.target.value } })}
+          onBlur={() => void 0}
+          autoFocus
         />
       );
     case 'image':
@@ -136,9 +146,10 @@ export default function ElementContent({ element, onUpdate, isPreviewMode = fals
       const mcContent = element.content as MultipleChoiceContent;
       return wrapWithContainer(
         <MultipleChoice
+          id={element.id}
           question={mcContent.question}
           options={mcContent.options}
-          onChange={(updates) => onUpdate(element.id, { content: { ...mcContent, ...updates } as ElementContentType })}
+          onChange={(updates) => onUpdate(element.id, { content: { ...mcContent, ...updates } })}
           allowMultiple={mcContent.allowMultiple}
           shuffleOptions={mcContent.shuffleOptions}
           isPreviewMode={isPreviewMode}
@@ -148,25 +159,28 @@ export default function ElementContent({ element, onUpdate, isPreviewMode = fals
       const mapContent = element.content as MapQuizContent;
       return wrapWithContainer(
         <MapQuiz
+          id={element.id}
           mapImage={mapContent.mapImage}
           markers={mapContent.markers}
           regions={mapContent.regions}
           mode={mapContent.mode}
           isPreviewMode={isPreviewMode}
-          onChange={(updates) => onUpdate(element.id, { content: { ...mapContent, ...updates } as ElementContentType })}
+          onChange={(updates) => onUpdate(element.id, { content: { ...mapContent, ...updates } })}
         />
       );
     case 'jigsaw':
       const jigsawContent = element.content as JigsawContent;
       return wrapWithContainer(
         <JigsawPuzzle
+          id={element.id}
           imageUrl={jigsawContent.imageUrl}
           rows={jigsawContent.rows}
           columns={jigsawContent.columns}
           difficulty={jigsawContent.difficulty}
           allowRotation={jigsawContent.allowRotation}
           showPreview={jigsawContent.showPreview}
-          onChange={(updates) => onUpdate(element.id, { content: { ...jigsawContent, ...updates } as ElementContentType })}
+          pieces={jigsawContent.pieces}
+          onChange={(updates) => onUpdate(element.id, { content: { ...jigsawContent, ...updates } })}
           isPreviewMode={isPreviewMode}
         />
       );
@@ -174,32 +188,25 @@ export default function ElementContent({ element, onUpdate, isPreviewMode = fals
       const timerContent = element.content as TimerContent;
       return wrapWithContainer(
         <TimerComponent
+          id={element.id}
           initialTime={timerContent.initialTime}
           countDirection={timerContent.countDirection}
-          format={timerContent.format === 'hours' ? '24hour' : timerContent.format}
+          format={timerContent.format}
           autoStart={timerContent.autoStart}
           showControls={timerContent.showControls}
-          onChange={(updates) => {
-            const format = updates.format === '24hour' ? 'hours' : updates.format;
-            onUpdate(element.id, { 
-              content: { 
-                ...timerContent, 
-                ...updates,
-                format
-              } as ElementContentType 
-            });
-          }}
+          onChange={(updates) => onUpdate(element.id, { content: { ...timerContent, ...updates } })}
           isPreviewMode={isPreviewMode}
         />
       );
     case 'grid-puzzle':
       const gridContent = element.content as GridPuzzleContent;
-      const cells = (gridContent.cells ?? []).map(cell => ({
+      const cells = gridContent.cells.map(cell => ({
         ...cell,
         type: 'text' as const
       }));
       return wrapWithContainer(
         <GridPuzzle
+          id={element.id}
           rows={gridContent.rows}
           columns={gridContent.columns}
           cells={cells}
@@ -213,11 +220,21 @@ export default function ElementContent({ element, onUpdate, isPreviewMode = fals
               content: { 
                 ...gridContent, 
                 ...updates,
-                cells: updatedCells ?? gridContent.cells,
-                revealStyle: gridContent.revealStyle
-              } as ElementContentType 
+                cells: updatedCells ?? cells
+              }
             });
           }}
+          isPreviewMode={isPreviewMode}
+        />
+      );
+    case 'crossword':
+      const crosswordContent = element.content as CrosswordContent;
+      return wrapWithContainer(
+        <Crossword
+          id={element.id}
+          cells={crosswordContent.cells}
+          clues={crosswordContent.clues}
+          onChange={(updates) => onUpdate(element.id, { content: { ...crosswordContent, ...updates } })}
           isPreviewMode={isPreviewMode}
         />
       );

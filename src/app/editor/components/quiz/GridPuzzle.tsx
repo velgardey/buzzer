@@ -1,5 +1,6 @@
-import { useState, useCallback, useMemo, useEffect } from 'react';
+import { useState, useCallback, useEffect } from 'react';
 import { motion } from 'framer-motion';
+import { useQuizState } from './QuizStateManager';
 
 interface Cell {
   id: string;
@@ -8,18 +9,26 @@ interface Cell {
   type: 'text';
   isRevealed: boolean;
   backgroundColor: string;
+  isCorrect?: boolean;
 }
 
 interface GridPuzzleProps {
+  id: string;
   rows: number;
   columns: number;
   cells: Cell[];
   revealStyle: 'click' | 'hover';
-  onChange: (updates: Partial<{ rows: number; columns: number; cells: Cell[]; revealStyle: 'click' | 'hover' }>) => void;
+  onChange: (updates: {
+    rows?: number;
+    columns?: number;
+    cells?: Cell[];
+    revealStyle?: 'click' | 'hover';
+  }) => void;
   isPreviewMode?: boolean;
 }
 
 export default function GridPuzzle({
+  id,
   rows,
   columns,
   cells: initialCells,
@@ -29,90 +38,91 @@ export default function GridPuzzle({
 }: GridPuzzleProps) {
   const [selectedCell, setSelectedCell] = useState<string | null>(null);
   const [draggedCell, setDraggedCell] = useState<string | null>(null);
-  const [showAllContent] = useState(false);
+  const [cells, setCells] = useState(initialCells);
+  const { updateScore, updateProgress, setFeedback } = useQuizState();
 
-  // Ensure we have the correct number of cells
-  const cells = useMemo(() => {
-    const totalCells = rows * columns;
-    const result: Cell[] = [];
-    
-    for (let i = 0; i < totalCells; i++) {
-      if (i < initialCells.length) {
-        // Reuse existing cell with explicit property assignment and null checks
-        const existingCell = initialCells[i];
-        if (existingCell) {
-          result.push({
-            id: existingCell.id,
-            content: existingCell.content,
-            hint: existingCell.hint,
-            type: existingCell.type,
-            isRevealed: existingCell.isRevealed,
-            backgroundColor: existingCell.backgroundColor
-          });
-        } else {
-          // Fallback for undefined cell
-          const timestamp = Date.now();
-          result.push({
-            id: `cell-${i}-${timestamp}`,
-            content: '',
-            hint: '',
-            type: 'text',
-            isRevealed: false,
-            backgroundColor: '#ffffff'
-          });
+  useEffect(() => {
+    setCells(initialCells);
+  }, [initialCells]);
+
+  const handleCellClick = useCallback((cellId: string) => {
+    if (!isPreviewMode) {
+      setSelectedCell(cellId);
+      return;
+    }
+
+    if (revealStyle === 'click') {
+      const cell = cells.find(c => c.id === cellId);
+      if (cell && !cell.isRevealed) {
+        const newCells = cells.map(c =>
+          c.id === cellId ? { ...c, isRevealed: true } : c
+        );
+        setCells(newCells);
+        onChange({ cells: newCells });
+
+        // Calculate score after revealing
+        const totalCells = cells.length;
+        const revealedCells = newCells.filter(c => c.isRevealed).length;
+        const score = Math.round((revealedCells / totalCells) * 100);
+        
+        updateScore(id, score, 100);
+        updateProgress(id, score === 100);
+        
+        if (score === 100) {
+          setFeedback(id, true, 'Congratulations! You\'ve revealed all cells.');
         }
-      } else {
-        // Create new cell with guaranteed unique ID
-        const timestamp = Date.now();
-        result.push({
-          id: `cell-${i}-${timestamp}`,
-          content: '',
-          hint: '',
-          type: 'text',
-          isRevealed: false,
-          backgroundColor: '#ffffff'
-        });
       }
     }
+  }, [cells, isPreviewMode, revealStyle, onChange, id, updateScore, updateProgress, setFeedback]);
 
-    return result;
-  }, [rows, columns, initialCells]);
+  const handleCellHover = useCallback((cellId: string) => {
+    if (!isPreviewMode || revealStyle !== 'hover') return;
 
-  // Update cells if the count doesn't match
-  useEffect(() => {
-    if (cells.length !== initialCells.length) {
-      onChange({ cells });
+    const cell = cells.find(c => c.id === cellId);
+    if (cell && !cell.isRevealed) {
+      const newCells = cells.map(c =>
+        c.id === cellId ? { ...c, isRevealed: true } : c
+      );
+      setCells(newCells);
+      onChange({ cells: newCells });
+
+      // Calculate score after revealing
+      const totalCells = cells.length;
+      const revealedCells = newCells.filter(c => c.isRevealed).length;
+      const score = Math.round((revealedCells / totalCells) * 100);
+      
+      updateScore(id, score, 100);
+      updateProgress(id, score === 100);
+      
+      if (score === 100) {
+        setFeedback(id, true, 'Congratulations! You\'ve revealed all cells.');
+      }
     }
-  }, [cells, initialCells.length, onChange]);
+  }, [cells, isPreviewMode, revealStyle, onChange, id, updateScore, updateProgress, setFeedback]);
 
   const handleCellUpdate = useCallback((cellId: string, updates: Partial<Cell>) => {
-    const newCells = cells.map(cell => 
-      cell.id === cellId ? { ...cell, ...updates } as Cell : cell
+    if (isPreviewMode) return;
+    
+    const newCells = cells.map(cell =>
+      cell.id === cellId ? { ...cell, ...updates } : cell
     );
+    setCells(newCells);
     onChange({ cells: newCells });
-  }, [cells, onChange]);
+  }, [cells, isPreviewMode, onChange]);
 
   const handleGridResize = useCallback((newRows: number, newColumns: number) => {
-    const totalCells = newRows * newColumns;
+    if (isPreviewMode) return;
+
+    const currentCells = [...cells];
     const newCells: Cell[] = [];
 
-    for (let i = 0; i < totalCells; i++) {
-      const row = Math.floor(i / newColumns);
-      const col = i % newColumns;
-      const existingCell = cells[i];
-
+    for (let i = 0; i < newRows * newColumns; i++) {
+      const existingCell = currentCells[i];
       if (existingCell) {
-        newCells.push({
-          id: existingCell.id,
-          content: existingCell.content,
-          hint: existingCell.hint,
-          type: existingCell.type,
-          isRevealed: existingCell.isRevealed,
-          backgroundColor: existingCell.backgroundColor
-        });
+        newCells.push(existingCell);
       } else {
         newCells.push({
-          id: `cell-${row}-${col}-${Date.now()}`,
+          id: `cell-${i}-${Date.now()}`,
           content: '',
           hint: '',
           type: 'text',
@@ -122,19 +132,20 @@ export default function GridPuzzle({
       }
     }
 
-    onChange({ rows: newRows, columns: newColumns, cells: newCells });
-  }, [cells, onChange]);
+    onChange({
+      rows: newRows,
+      columns: newColumns,
+      cells: newCells.slice(0, newRows * newColumns)
+    });
+  }, [cells, isPreviewMode, onChange]);
 
   const handleDragStart = useCallback((cellId: string) => {
+    if (isPreviewMode) return;
     setDraggedCell(cellId);
-  }, []);
-
-  const handleDragOver = useCallback((e: React.DragEvent) => {
-    e.preventDefault();
-  }, []);
+  }, [isPreviewMode]);
 
   const handleDrop = useCallback((targetCellId: string) => {
-    if (!draggedCell || draggedCell === targetCellId) return;
+    if (!draggedCell || draggedCell === targetCellId || isPreviewMode) return;
 
     const newCells = [...cells];
     const draggedIndex = newCells.findIndex(cell => cell.id === draggedCell);
@@ -145,12 +156,13 @@ export default function GridPuzzle({
       if (draggedCellObj) {
         newCells.splice(draggedIndex, 1);
         newCells.splice(targetIndex, 0, draggedCellObj);
+        setCells(newCells);
         onChange({ cells: newCells });
       }
     }
 
     setDraggedCell(null);
-  }, [cells, draggedCell, onChange]);
+  }, [cells, draggedCell, isPreviewMode, onChange]);
 
   return (
     <div className="w-full space-y-4">
@@ -207,75 +219,62 @@ export default function GridPuzzle({
         {cells.map((cell) => (
           <motion.div
             key={cell.id}
-            draggable={!isPreviewMode}
-            onDragStart={() => handleDragStart(cell.id)}
-            onDragOver={handleDragOver}
-            onDrop={() => handleDrop(cell.id)}
-            onClick={() => {
-              if (isPreviewMode && revealStyle === 'click') {
-                handleCellUpdate(cell.id, { isRevealed: true });
-              } else if (!isPreviewMode) {
-                setSelectedCell(cell.id);
-              }
-            }}
-            onMouseEnter={() => {
-              if (isPreviewMode && revealStyle === 'hover') {
-                handleCellUpdate(cell.id, { isRevealed: true });
-              }
-            }}
-            className={`aspect-square border-2 border-gray-800 rounded-lg p-2
-                     ${!isPreviewMode ? 'cursor-pointer hover:shadow-lg' : ''}
+            layoutId={cell.id}
+            className={`aspect-square bg-white border-2 border-gray-800 rounded-lg p-4
+                     relative cursor-pointer group transition-all duration-300
                      ${selectedCell === cell.id ? 'ring-2 ring-purple-500' : ''}
-                     ${draggedCell === cell.id ? 'opacity-50' : ''}`}
-            style={{ backgroundColor: cell.backgroundColor ?? '#ffffff' }}
+                     ${cell.isRevealed ? 'bg-purple-50' : ''}`}
+            onClick={() => handleCellClick(cell.id)}
+            onMouseEnter={() => handleCellHover(cell.id)}
+            onDragStart={() => handleDragStart(cell.id)}
+            onDragOver={(e) => e.preventDefault()}
+            onDrop={() => handleDrop(cell.id)}
+            draggable={!isPreviewMode}
+            style={{
+              backgroundColor: cell.backgroundColor
+            }}
           >
-            <div className="w-full h-full flex flex-col">
-              {(!isPreviewMode || cell.isRevealed || showAllContent) && (
-                <>
-                  <textarea
-                    value={cell.content}
-                    onChange={(e) => handleCellUpdate(cell.id, { content: e.target.value })}
-                    className="w-full flex-1 resize-none bg-transparent border-none 
-                             focus:outline-none focus:ring-0 text-center"
-                    placeholder="Enter content..."
-                    readOnly={isPreviewMode}
-                  />
-                  {!isPreviewMode && (
-                    <input
-                      value={cell.hint}
-                      onChange={(e) => handleCellUpdate(cell.id, { hint: e.target.value })}
-                      className="w-full mt-1 text-sm text-gray-500 bg-transparent border-none 
-                               focus:outline-none focus:ring-0 text-center"
-                      placeholder="Enter hint..."
-                    />
-                  )}
-                </>
-              )}
-              {isPreviewMode && !cell.isRevealed && !showAllContent && cell.hint && (
-                <div className="w-full h-full flex items-center justify-center text-sm text-gray-500">
-                  {cell.hint}
+            {isPreviewMode ? (
+              cell.isRevealed ? (
+                <div className="w-full h-full flex items-center justify-center">
+                  <p className="text-center break-words">{cell.content}</p>
                 </div>
-              )}
-            </div>
+              ) : (
+                <div className="w-full h-full flex items-center justify-center">
+                  {cell.hint && (
+                    <p className="text-center text-gray-500 text-sm">{cell.hint}</p>
+                  )}
+                </div>
+              )
+            ) : (
+              <div className="space-y-2">
+                <input
+                  type="text"
+                  value={cell.content}
+                  onChange={(e) => handleCellUpdate(cell.id, { content: e.target.value })}
+                  placeholder="Content"
+                  className="w-full px-2 py-1 border-2 border-gray-300 rounded
+                           focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <input
+                  type="text"
+                  value={cell.hint}
+                  onChange={(e) => handleCellUpdate(cell.id, { hint: e.target.value })}
+                  placeholder="Hint"
+                  className="w-full px-2 py-1 border-2 border-gray-300 rounded
+                           focus:outline-none focus:ring-2 focus:ring-purple-500"
+                />
+                <input
+                  type="color"
+                  value={cell.backgroundColor}
+                  onChange={(e) => handleCellUpdate(cell.id, { backgroundColor: e.target.value })}
+                  className="w-full h-8 rounded cursor-pointer"
+                />
+              </div>
+            )}
           </motion.div>
         ))}
       </div>
-
-      {/* Cell Properties */}
-      {!isPreviewMode && selectedCell && (
-        <div className="mt-4 p-4 border-2 border-gray-800 rounded-lg space-y-4">
-          <h3 className="text-lg font-bold">Cell Properties</h3>
-          <div className="space-y-2">
-            <label className="block text-sm text-gray-600">Background Color</label>
-            <input
-              type="color"
-              value={(cells.find(c => c.id === selectedCell)?.backgroundColor) ?? '#ffffff'}
-              onChange={(e) => handleCellUpdate(selectedCell, { backgroundColor: e.target.value })}
-              className="w-full h-10 rounded-lg cursor-pointer"
-            />
-          </div>
-        </div>
-      )}
     </div>
   );
 } 

@@ -2,6 +2,7 @@ import { useState, useCallback, useRef, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { MapPin, Plus, Minus, Map as MapIcon, MousePointer, PlusCircle, X } from 'lucide-react';
 import Image from 'next/image';
+import type { MapQuizProps } from '../../types';
 
 interface MapMarker {
   id: string;
@@ -19,20 +20,6 @@ interface Region {
   label: string;
   hint?: string;
   isCorrect: boolean;
-}
-
-interface MapQuizProps {
-  mapImage: string;
-  markers: MapMarker[];
-  regions: Region[];
-  onChange: (updates: {
-    mapImage?: string;
-    markers?: MapMarker[];
-    regions?: Region[];
-    mode?: 'markers' | 'regions';
-  }) => void;
-  mode?: 'markers' | 'regions';
-  isPreviewMode?: boolean;
 }
 
 // Memoized Marker component to prevent unnecessary re-renders
@@ -117,14 +104,14 @@ const Marker = memo(({
 
 Marker.displayName = 'Marker';
 
-const MapQuiz = ({ 
-  mapImage, 
-  markers, 
-  regions = [], 
-  onChange, 
-  isPreviewMode = false,
-  mode = 'markers' 
-}: MapQuizProps) => {
+export default function MapQuiz({
+  mapImage,
+  markers,
+  regions,
+  mode,
+  onChange,
+  isPreviewMode = false
+}: MapQuizProps) {
   const [selectedItem, setSelectedItem] = useState<string | null>(null);
   const [isPlacementMode, setIsPlacementMode] = useState(true);
   const [showAnswers, setShowAnswers] = useState(false);
@@ -547,8 +534,6 @@ const MapQuiz = ({
       </AnimatePresence>
     </div>
   );
-};
+}
 
-MapQuiz.displayName = 'MapQuiz';
-
-export default MapQuiz; 
+MapQuiz.displayName = 'MapQuiz'; 
